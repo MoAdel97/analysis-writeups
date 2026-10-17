@@ -1,0 +1,33 @@
+// The denominator is the whole trick: not how many letters were sent, but how
+// many letters' worth of response window has actually elapsed. A piece that
+// landed three days ago contributes 0.02 of a letter, not 1.
+
+Pieces = SUM ( 'fact_piece'[pieces] )
+
+Replies = SUM ( 'fact_piece'[replied] )
+
+Response Rate =
+DIVIDE ( [Replies], [Pieces] )
+
+// SUMX, not SUM: the weight belongs to each row's campaign, so it has to be
+// evaluated row by row through the relationship.
+Pieces Matured =
+SUMX ( 'fact_piece', RELATED ( 'dim_campaign'[expected_response_pct] ) )
+
+Adjusted Response Rate =
+DIVIDE ( [Replies], [Pieces Matured] )
+
+// The comparison point: campaigns old enough that nothing is still in flight.
+Mature Pieces  = CALCULATE ( [Pieces],  'dim_campaign'[maturity] = "Mature" )
+Mature Replies = CALCULATE ( [Replies], 'dim_campaign'[maturity] = "Mature" )
+Baseline Rate  = DIVIDE ( [Mature Replies], [Mature Pieces] )
+
+Pieces In Flight = CALCULATE ( [Pieces], 'dim_campaign'[maturity] <> "Mature" )
+
+// Cumulative share of replies by lag, for the response curve itself.
+Response Curve % =
+VAR d     = MAX ( 'fact_reply'[lag_days] )
+VAR total = CALCULATE ( [Replies], REMOVEFILTERS ( 'fact_reply'[lag_days] ) )
+VAR upTo  = CALCULATE ( [Replies], REMOVEFILTERS ( 'fact_reply'[lag_days] ),
+                        'fact_reply'[lag_days] <= d )
+RETURN DIVIDE ( upTo, total )
